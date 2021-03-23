@@ -8,7 +8,8 @@ import (
 )
 
 type Player struct {
-	name string
+	name  string
+	score int
 }
 
 type Cell struct {
@@ -124,18 +125,7 @@ func (source Cell) move(dest Cell, game *Game) {
 	}
 }
 
-func main() {
-
-	//var name string
-	//var srow, scol, drow, dcol int
-
-	// fmt.Println("Enter your name to play")
-	// fmt.Scanf("%s", &name)
-	player := Player{name: "Rag"}
-
-	app := tview.NewApplication()
-	table := tview.NewTable().
-		SetBorders(true)
+func initialize_game(player Player, table *tview.Table) *Game {
 	cols, rows := 7, 7
 	for r := 0; r < rows; r++ {
 		for c := 0; c < cols; c++ {
@@ -170,19 +160,27 @@ func main() {
 		}
 	}
 
-	game := Game{player: player, board: table}
+	return &Game{player: player, board: table}
+}
 
-	cells := make([]Cell, 0, 2)
-
-	fmt.Println("********Staring the Game**********")
-
-	// validate the source and dest cells for the move
+func (game *Game) play(app *tview.Application, cells []Cell) {
 	game.board.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEscape {
+			modal := tview.NewModal().
+				SetText("Do you want to quit the application?").
+				AddButtons([]string{"Quit", "Cancel"}).
+				SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+					if buttonLabel == "Quit" {
+						app.Stop()
+					}
+				})
+
+			if err := app.SetRoot(modal, true).EnableMouse(true).Run(); err != nil {
+				panic(err)
+			}
 			app.Stop()
 		}
 		if key == tcell.KeyEnter {
-			//fmt.Println(game.board.GetSelection())
 			game.board.SetSelectable(true, true)
 		}
 	}).SetSelectedFunc(func(row int, column int) {
@@ -194,10 +192,11 @@ func main() {
 
 		if len(cells) == 2 {
 			source, dest := cells[0], cells[1]
-			isValid := source.isValidMove(dest, game)
+			isValid := source.isValidMove(dest, *game)
 			game.isValidMove = isValid
 			if isValid {
-				source.move(dest, &game)
+				source.move(dest, game)
+				game.player.score += 1
 			} else {
 				fmt.Println(isValid)
 			}
@@ -206,8 +205,47 @@ func main() {
 			game.board.GetCell(dest.row, dest.col).SetTextColor(tcell.ColorWhite)
 		}
 	})
+}
 
-	if err := app.SetRoot(table, true).EnableMouse(true).Run(); err != nil {
+func main() {
+
+	player := Player{name: "Rag"}
+
+	app := tview.NewApplication()
+	table := tview.NewTable().SetBorders(true)
+
+	newPrimitive := func(text string) tview.Primitive {
+		return tview.NewTextView().
+			SetTextAlign(tview.AlignCenter).
+			SetText(text)
+	}
+	menu := newPrimitive("Game Menu\n\n 1. Press Esc to Quit. \n\n 2. Press Enter to select the source grid, then press enter the dest grid to jump\n\n")
+	//main := newPrimitive("Main content")
+	sideBar := newPrimitive("Score")
+
+	grid := tview.NewGrid().
+		SetRows(3, 0, 3).
+		SetColumns(30, 0, 30).
+		SetBorders(true).
+		AddItem(newPrimitive("Brainvita\n\n Can leave with least amount of Pegs in Board????????"), 0, 0, 1, 3, 0, 0, false)
+
+	// Layout for screens narrower than 100 cells (menu and side bar are hidden).
+	grid.AddItem(menu, 0, 0, 0, 0, 0, 0, false).
+		AddItem(table, 1, 0, 1, 3, 0, 0, true).
+		AddItem(sideBar, 0, 0, 0, 0, 0, 0, false)
+
+	// Layout for screens wider than 100 cells.
+	grid.AddItem(menu, 1, 0, 1, 1, 0, 100, false).
+		AddItem(table, 1, 1, 1, 1, 0, 100, true).
+		AddItem(sideBar, 1, 2, 1, 1, 0, 100, false)
+
+	game := initialize_game(player, table)
+
+	cells := make([]Cell, 0, 2)
+
+	game.play(app, cells)
+
+	if err := app.SetRoot(grid, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 }
